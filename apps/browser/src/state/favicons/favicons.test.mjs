@@ -343,3 +343,33 @@ test("an icon the page reported during a lookup still wins after the cache start
     delete globalThis.faviconsForTest;
   }
 });
+
+test("a row whose lookup answered too late, after the cache started over and dropped its icon, asks again", async () => {
+  const S = () => useBrowser.getState();
+  S().hydrate({});
+  pruneProfileFavicons("default");
+  const page = "https://late-answer.test/";
+  const windowId = S().createWindow({ url: page });
+  const tabId = S().windows[windowId].tabIds[0];
+  S().updateTab(tabId, { url: page });
+  const key = engineProfile(S(), "default");
+  seedFavicons({ images: ["data:image/png;base64,NEW"], profiles: { [key]: { pages: {}, srcs: { "https://late-answer.test/new.png": 0 } } }, themes: {} });
+  const held = heldLookups();
+  globalThis.storedFavicons = [];
+  const row = mount(() => useFavicon(page, null, "default"));
+  try {
+    await waitFor(() => held.some((l) => l.pages.includes(page)));
+    noteFavicon(tabId, "https://late-answer.test/new.png");
+    await settle();
+    adoptFavicons("default", Array.from({ length: 3000 }, (_, i) => ({ page: `https://late${i}.test/`, icon: "i", png: `L${i}` })));
+    assert.equal(cached(page), undefined);
+    held.shift().answer({ [page]: "data:image/png;base64,OLD" });
+    await waitFor(() => held.some((l) => l.pages.includes(page)));
+    held.shift().answer({ [page]: "data:image/png;base64,AGAIN" });
+    await waitFor(() => cached(page) === "data:image/png;base64,AGAIN");
+  } finally {
+    row.unmount();
+    delete globalThis.faviconsForTest;
+    pruneProfileFavicons("default");
+  }
+});
