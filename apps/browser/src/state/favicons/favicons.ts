@@ -117,12 +117,13 @@ function lookUpPages(key: string, list: string[]) {
         return writes.length ? { ...icons, pages: withPages(icons.pages, writes) } : icons;
       }, true),
     )
-    .catch((error) => {
-      for (const page of list) asked.delete(`${key}|${page}`);
-      console.warn("[favicons] lookup failed", error);
-    })
+    .catch((error) => console.warn("[favicons] lookup failed", error))
     .finally(() => {
-      for (const { id, entry } of pending) if (--entry.lookups === 0) inFlight.delete(id);
+      for (const { id, entry } of pending) {
+        if (--entry.lookups > 0) continue;
+        inFlight.delete(id);
+        asked.delete(id);
+      }
     });
 }
 
